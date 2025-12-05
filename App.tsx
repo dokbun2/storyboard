@@ -9,7 +9,13 @@ const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<'input' | 'output'>('input');
   const [data, setData] = useState<StoryboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [userApiKey, setUserApiKey] = useState<string>('');
+  const [userApiKey, setUserApiKey] = useState<string>(() => {
+    // Load API key from localStorage on initial render
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('gemini_api_key') || '';
+    }
+    return '';
+  });
 
   // Persistent Input State (maintained across page navigation)
   const [jsonInput, setJsonInput] = useState<string>('');
@@ -28,6 +34,18 @@ const App: React.FC = () => {
 
   const showToast = (message: string, type: ToastType = 'success') => {
     setToast({ visible: true, message, type });
+  };
+
+  // Handler for setting API key with localStorage persistence
+  const handleSetApiKey = (key: string) => {
+    setUserApiKey(key);
+    if (typeof window !== 'undefined') {
+      if (key) {
+        localStorage.setItem('gemini_api_key', key);
+      } else {
+        localStorage.removeItem('gemini_api_key');
+      }
+    }
   };
 
   const handleVisualize = (jsonInput: string, refImage?: string | null) => {
@@ -116,7 +134,7 @@ const App: React.FC = () => {
             onVisualize={handleVisualize}
             error={error}
             userApiKey={userApiKey}
-            onSetApiKey={setUserApiKey}
+            onSetApiKey={handleSetApiKey}
             jsonInput={jsonInput}
             onJsonInputChange={setJsonInput}
             refImage={refImage}
