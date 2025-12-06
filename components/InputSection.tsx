@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Code2, AlertTriangle, Upload, Image as ImageIcon, X, Settings, Key, Home, Grid, Video, HardDriveUpload } from 'lucide-react';
+import { Sparkles, Code2, AlertTriangle, Upload, Image as ImageIcon, X, Settings, Key, Home, Grid, Video, HardDriveUpload, Link, Loader2 } from 'lucide-react';
 
 interface InputSectionProps {
   onVisualize: (jsonString: string, referenceImage?: string | null) => void;
@@ -35,6 +35,12 @@ const InputSection: React.FC<InputSectionProps> = ({
   const [tempApiKey, setTempApiKey] = useState(userApiKey);
   const [showApiKeyWarning, setShowApiKeyWarning] = useState(false);
 
+  // URL input state
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [imageUrl, setImageUrl] = useState('');
+  const [isLoadingUrl, setIsLoadingUrl] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const restoreInputRef = useRef<HTMLInputElement>(null);
 
@@ -68,6 +74,49 @@ const InputSection: React.FC<InputSectionProps> = ({
   const clearImage = () => {
     onRefImageChange(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    setImageUrl('');
+    setUrlError(null);
+  };
+
+  // Load image from URL
+  const handleLoadImageUrl = async () => {
+    if (!imageUrl.trim()) return;
+
+    setIsLoadingUrl(true);
+    setUrlError(null);
+
+    try {
+      // Fetch the image
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        throw new Error('이미지를 불러올 수 없습니다.');
+      }
+
+      const blob = await response.blob();
+
+      // Validate it's an image
+      if (!blob.type.startsWith('image/')) {
+        throw new Error('유효한 이미지 파일이 아닙니다.');
+      }
+
+      // Convert to base64
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        onRefImageChange(reader.result as string);
+        setShowUrlInput(false);
+        setImageUrl('');
+        onShowToast('이미지 URL 로드 완료!');
+      };
+      reader.onerror = () => {
+        throw new Error('이미지 변환 중 오류가 발생했습니다.');
+      };
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error('URL image load failed:', error);
+      setUrlError(error instanceof Error ? error.message : '이미지를 불러올 수 없습니다.');
+    } finally {
+      setIsLoadingUrl(false);
+    }
   };
 
   const handleSaveApiKey = () => {
@@ -255,10 +304,7 @@ const InputSection: React.FC<InputSectionProps> = ({
           {/* Right Sidebar: Reference Image & Actions */}
           <div className="flex flex-col gap-4">
             {/* Reference Image Upload */}
-            <div
-              className="relative flex-1 rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/50 transition-colors flex flex-col items-center justify-center p-4 text-center cursor-pointer group/upload overflow-hidden min-h-[160px]"
-              onClick={() => fileInputRef.current?.click()}
-            >
+            <div className="relative flex-1 rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 overflow-hidden min-h-[160px] flex flex-col">
               <input
                 type="file"
                 accept="image/*"
@@ -268,28 +314,77 @@ const InputSection: React.FC<InputSectionProps> = ({
               />
 
               {refImage ? (
-                <>
-                  <img src={refImage} alt="Reference" className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover/upload:scale-105 transition-transform duration-500" />
+                <div className="flex-1 relative flex flex-col items-center justify-center p-4 text-center">
+                  <img src={refImage} alt="Reference" className="absolute inset-0 w-full h-full object-cover opacity-50" />
                   <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"></div>
                   <div className="relative z-10 flex flex-col items-center">
                     <ImageIcon className="w-8 h-8 text-indigo-400 mb-2" />
                     <span className="text-xs text-zinc-200 font-medium">참조 이미지 추가됨</span>
                     <button
-                      onClick={(e) => { e.stopPropagation(); clearImage(); }}
+                      onClick={clearImage}
                       className="mt-2 p-1.5 bg-red-500/20 text-red-400 rounded-full hover:bg-red-500/40 transition-colors"
                     >
                       <X size={14} />
                     </button>
                   </div>
-                </>
+                </div>
+              ) : showUrlInput ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-4 gap-3">
+                  <div className="w-full">
+                    <input
+                      type="url"
+                      value={imageUrl}
+                      onChange={(e) => setImageUrl(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleLoadImageUrl()}
+                      placeholder="이미지 URL 입력..."
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-700 rounded-lg text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500/50"
+                      autoFocus
+                    />
+                    {urlError && (
+                      <p className="text-xs text-red-400 mt-1">{urlError}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-2 w-full">
+                    <button
+                      onClick={() => { setShowUrlInput(false); setImageUrl(''); setUrlError(null); }}
+                      className="flex-1 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg transition-colors"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={handleLoadImageUrl}
+                      disabled={!imageUrl.trim() || isLoadingUrl}
+                      className="flex-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs rounded-lg transition-colors flex items-center justify-center gap-1"
+                    >
+                      {isLoadingUrl ? <Loader2 size={12} className="animate-spin" /> : <Link size={12} />}
+                      불러오기
+                    </button>
+                  </div>
+                </div>
               ) : (
-                <>
-                  <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center mb-3 group-hover/upload:scale-110 transition-transform">
+                <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
+                  <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center mb-3">
                     <Upload size={20} className="text-zinc-500" />
                   </div>
-                  <span className="text-sm text-zinc-400 font-medium">참조 이미지 추가</span>
-                  <span className="text-xs text-zinc-600 mt-1">(선택 사항)</span>
-                </>
+                  <span className="text-sm text-zinc-400 font-medium mb-1">참조 이미지 추가</span>
+                  <span className="text-xs text-zinc-600 mb-3">(선택 사항)</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg transition-colors flex items-center gap-1"
+                    >
+                      <Upload size={12} />
+                      파일 업로드
+                    </button>
+                    <button
+                      onClick={() => setShowUrlInput(true)}
+                      className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg transition-colors flex items-center gap-1"
+                    >
+                      <Link size={12} />
+                      URL 입력
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
